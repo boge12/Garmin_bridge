@@ -24,7 +24,7 @@ Reads speed and distance from any Bluetooth FTMS treadmill and re-broadcasts the
 | Part | Notes |
 |------|-------|
 | [Seeed XIAO nRF52840](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html) | ~$10, USB-C powered |
-| USB-C cable (data + power) | Any data-capable USB-C cable |
+| USB-A to USB-C cable (data-capable) | Treadmill port is USB-A; XIAO port is USB-C |
 | Optional: 3D-printed case | See [hardware/case/](hardware/case/) |
 
 Full BOM with sourcing options: [hardware/BOM.md](hardware/BOM.md)

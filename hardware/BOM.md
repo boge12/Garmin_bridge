@@ -1,14 +1,14 @@
 # Bill of Materials — GarminBridge DIY Kit
 
-No soldering required. Just one component and a USB-C cable.
+No soldering required. Just one component and a cable.
 
 ## Component List
 
 | Qty | Part | Sourcing Options | Approx. Cost |
 |-----|------|-----------------|--------------|
 | 1 | **Seeed XIAO nRF52840** | [Seeed Studio](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html) / Amazon / AliExpress | $6–$13 |
-| 1 | USB-C cable (data + power) | Any USB-C data cable | $0 (use existing) |
-| 1 | USB power source | Treadmill USB port / wall adapter / power bank | $0 |
+| 1 | **USB-A to USB-C cable** (data-capable) | Any Android phone/tablet charging cable | $0 (use existing) |
+| 1 | USB power source | Treadmill's USB-A port (recommended) / wall adapter / power bank | $0 |
 | 1 | 3D-printed case (optional) | Print yourself — see [hardware/case/](case/) | ~$0.50 filament |
 
 **Total DIY cost: ~$10–$15** (board only; you likely already have a USB cable)
@@ -36,7 +36,9 @@ Any USB-A or USB-C 5V source works:
 
 ### Cable Note
 
-Use a **data cable**, not a charge-only cable. Charge-only cables lack the data lines needed for firmware updates via UF2. Most USB-C cables support data, but cheap "charging cables" sometimes don't. Any cable that works with your phone for data transfer will work.
+The XIAO has a **USB-C port**. Treadmill USB ports are **USB-A** (the standard rectangular type). You need a **USB-A to USB-C cable** — the same cable used to charge most Android phones.
+
+Use a **data-capable** cable, not a charge-only cable. Charge-only cables lack the data lines needed for firmware updates via UF2. Any cable that syncs your Android phone will work fine.
 
 ## What You Don't Need
 
