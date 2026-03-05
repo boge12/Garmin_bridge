@@ -352,7 +352,9 @@ void setup() {
 
   Bluefruit.Scanner.setRxCallback(scanCallback);
   Bluefruit.Scanner.restartOnDisconnect(true);
-  Bluefruit.Scanner.filterUuid(BLEUuid(FTMS_SERVICE_UUID));
+  // No hardware UUID filter: some treadmills (e.g. Horizon 7.4AT) only include
+  // UUID 0x1826 in the scan response, not the primary advertisement. We check
+  // for the UUID manually in scanCallback() instead.
   Bluefruit.Scanner.setInterval(160, 80);   // 100 ms / 50 ms
   Bluefruit.Scanner.useActiveScan(true);
   Bluefruit.Scanner.start(0);
