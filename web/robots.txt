@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://boge12.github.io/Garmin_bridge/web/sitemap.xml

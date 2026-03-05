@@ -5,6 +5,7 @@
  *
  * Hardware : Seeed XIAO nRF52840
  * Library  : Adafruit nRF52 Arduino (BSP ≥ 1.5.0)
+ * Version  : 1.1.0
  *
  * Behaviour
  * ---------
@@ -26,6 +27,9 @@
 
 #include <bluefruit.h>
 
+// Set to 0 to disable serial debug output (saves a few bytes of flash)
+#define DEBUG 1
+
 // ----------------------------------------------------------------
 // BLE UUIDs
 // ----------------------------------------------------------------
@@ -40,7 +44,7 @@
 // ----------------------------------------------------------------
 // FTMS Treadmill Data flags  (16-bit, little-endian)
 // ----------------------------------------------------------------
-#define FTMS_FLAG_MORE_DATA       (1u << 0)  // 0 = instant speed present
+#define FTMS_FLAG_MORE_DATA       (1u << 0)  // 0 = instant speed present (inverted!)
 #define FTMS_FLAG_AVG_SPEED       (1u << 1)
 #define FTMS_FLAG_TOTAL_DISTANCE  (1u << 2)
 #define FTMS_FLAG_INCLINATION     (1u << 3)
@@ -85,10 +89,12 @@ BLEClientCharacteristic ftmsTreadmillData(FTMS_TREADMILL_DATA_UUID);
 // ----------------------------------------------------------------
 // Shared state  (written from BLE notify ISR, read from main loop)
 // ----------------------------------------------------------------
-volatile uint16_t g_speed_kmh100 = 0;   // units: 0.01 km/h
-volatile uint32_t g_distance_m   = 0;   // units: 1 m
-volatile bool     g_treadmill_connected = false;
-volatile bool     g_watch_connected     = false;
+volatile uint16_t g_speed_kmh100         = 0;   // units: 0.01 km/h
+volatile uint32_t g_distance_m           = 0;   // units: 1 m
+volatile int16_t  g_inclination_pct10    = 0;   // units: 0.1%; 0x7FFF = unavailable
+volatile uint32_t g_last_ftms_ms         = 0;   // millis() of last FTMS notify
+volatile bool     g_treadmill_connected  = false;
+volatile bool     g_watch_connected      = false;
 
 // ----------------------------------------------------------------
 // LED helpers  (XIAO: active-low)
@@ -114,7 +120,12 @@ void updateLED() {
 //   [2..3]  Instant Speed   uint16  0.01 km/h  (when MORE_DATA bit = 0)
 //   [4..5]  Average Speed   uint16  0.01 km/h  (when AVG_SPEED bit = 1)
 //   [6..8]  Total Distance  uint24  1 m         (when TOTAL_DISTANCE bit = 1)
+//   [9..10] Inclination     sint16  0.1 %       (when INCLINATION bit = 1)
+//   [11..12]Ramp Angle      sint16  0.1 deg     (when INCLINATION bit = 1)
 //   …further optional fields skipped
+//
+// Note on MORE_DATA flag: when bit 0 is 0, instant speed IS present.
+// The flag name is misleading — think of it as "speed field omitted".
 // ----------------------------------------------------------------
 void parseFTMSTreadmill(const uint8_t* data, uint16_t len) {
   if (len < 4) return;
@@ -127,6 +138,12 @@ void parseFTMSTreadmill(const uint8_t* data, uint16_t len) {
     if (offset + 2 > len) return;
     g_speed_kmh100 = (uint16_t)data[offset] | ((uint16_t)data[offset + 1] << 8);
     offset += 2;
+#ifdef DEBUG
+    float speed_kmh = g_speed_kmh100 / 100.0f;
+    Serial.print("[FTMS] Speed: ");
+    Serial.print(speed_kmh, 2);
+    Serial.println(" km/h");
+#endif
   }
 
   // Average Speed (skip)
@@ -135,10 +152,35 @@ void parseFTMSTreadmill(const uint8_t* data, uint16_t len) {
   }
 
   // Total Distance (uint24, meters)
-  if ((flags & FTMS_FLAG_TOTAL_DISTANCE) && (offset + 3 <= len)) {
-    g_distance_m = (uint32_t)data[offset]
-                 | ((uint32_t)data[offset + 1] << 8)
-                 | ((uint32_t)data[offset + 2] << 16);
+  if (flags & FTMS_FLAG_TOTAL_DISTANCE) {
+    if (offset + 3 <= len) {
+      g_distance_m = (uint32_t)data[offset]
+                   | ((uint32_t)data[offset + 1] << 8)
+                   | ((uint32_t)data[offset + 2] << 16);
+#ifdef DEBUG
+      Serial.print("[FTMS] Distance: ");
+      Serial.print(g_distance_m);
+      Serial.println(" m");
+#endif
+    }
+    offset += 3;  // always advance, even if len was too short to read
+  }
+
+  // Inclination (sint16, 0.1 %) + Ramp Angle Setting (sint16, skip)
+  // Note: RSC has no inclination field; value is logged/available via serial only.
+  if (flags & FTMS_FLAG_INCLINATION) {
+    if (offset + 4 <= len) {
+      int16_t raw_incl = (int16_t)((uint16_t)data[offset] | ((uint16_t)data[offset + 1] << 8));
+      if (raw_incl != (int16_t)0x7FFF) {
+        g_inclination_pct10 = raw_incl;
+#ifdef DEBUG
+        Serial.print("[FTMS] Inclination: ");
+        Serial.print(g_inclination_pct10 / 10.0f, 1);
+        Serial.println(" %");
+#endif
+      }
+    }
+    offset += 4;  // inclination sint16 + ramp angle sint16
   }
 }
 
@@ -146,17 +188,21 @@ void parseFTMSTreadmill(const uint8_t* data, uint16_t len) {
 // Build and notify RSC Measurement
 //
 // Packet layout (flags = RSC_FLAG_TOTAL_DISTANCE set):
-//   [0]     Flags           uint8   = 0x02
-//   [1..2]  Instant Speed   uint16  0.01 m/s
+//   [0]     Flags           uint8   = 0x02 (or 0x06 when running)
+//   [1..2]  Instant Speed   uint16  1/256 m/s  (BT SIG GATT Spec unit)
 //   [3]     Cadence         uint8   = 0  (watch uses its own sensor)
-//   [4..7]  Total Distance  uint32  0.1 m
+//   [4..7]  Total Distance  uint32  1/10 m
+//
+// Speed conversion:
+//   speed_kmh100 is in 0.01 km/h units
+//   RSC unit is 1/256 m/s
+//   speed_rsc = speed_kmh100 * 256 / 360
+//   Check: 10 km/h → 1000 * 256 / 360 = 711 → 711/256 = 2.777 m/s = 10.0 km/h ✓
 // ----------------------------------------------------------------
 void sendRSCMeasurement() {
-  // Convert speed: 0.01 km/h → 0.01 m/s
-  //   speed_ms   = speed_kmh / 3.6
-  //   rsc_units  = speed_kmh100 * 100 / 360   (keeps integer arithmetic)
-  uint16_t speed_rsc      = (uint32_t)g_speed_kmh100 * 100 / 360;
-  uint32_t distance_rsc   = g_distance_m * 10;   // m → 0.1 m
+  // Convert speed: 0.01 km/h → 1/256 m/s
+  uint16_t speed_rsc    = (uint32_t)g_speed_kmh100 * 256 / 360;
+  uint32_t distance_rsc = g_distance_m * 10;   // m → 1/10 m
 
   uint8_t flags = RSC_FLAG_TOTAL_DISTANCE;
   if (speed_rsc > 0) flags |= RSC_FLAG_RUNNING;
@@ -170,6 +216,13 @@ void sendRSCMeasurement() {
   buf[5] = (distance_rsc >>  8) & 0xFF;
   buf[6] = (distance_rsc >> 16) & 0xFF;
   buf[7] = (distance_rsc >> 24) & 0xFF;
+
+#ifdef DEBUG
+  Serial.print("[RSC] notify speed_raw=");
+  Serial.print(speed_rsc);
+  Serial.print(" dist_raw=");
+  Serial.println(distance_rsc);
+#endif
 
   rscMeasurement.notify(buf, sizeof(buf));
 }
@@ -189,16 +242,25 @@ void onCentralConnect(uint16_t conn_handle) {
   ftmsTreadmillData.enableNotify();
   g_treadmill_connected = true;
   updateLED();
+#ifdef DEBUG
+  Serial.println("[BLE] Treadmill connected");
+#endif
 }
 
-void onCentralDisconnect(uint16_t conn_handle, uint8_t /*reason*/) {
+void onCentralDisconnect(uint16_t conn_handle, uint8_t reason) {
   g_treadmill_connected = false;
   g_speed_kmh100        = 0;
+  g_last_ftms_ms        = 0;
   updateLED();
   Bluefruit.Scanner.start(0);   // resume scanning
+#ifdef DEBUG
+  Serial.print("[BLE] Treadmill disconnected, reason=0x");
+  Serial.println(reason, HEX);
+#endif
 }
 
 void onFTMSNotify(BLEClientCharacteristic* /*chr*/, uint8_t* data, uint16_t len) {
+  g_last_ftms_ms = millis();
   parseFTMSTreadmill(data, len);
 }
 
@@ -217,12 +279,19 @@ void scanCallback(ble_gap_evt_adv_report_t* report) {
 void onPeripheralConnect(uint16_t /*conn_handle*/) {
   g_watch_connected = true;
   updateLED();
+#ifdef DEBUG
+  Serial.println("[BLE] Watch connected");
+#endif
 }
 
-void onPeripheralDisconnect(uint16_t /*conn_handle*/, uint8_t /*reason*/) {
+void onPeripheralDisconnect(uint16_t /*conn_handle*/, uint8_t reason) {
   g_watch_connected = false;
   updateLED();
   Bluefruit.Advertising.start(0);   // resume advertising
+#ifdef DEBUG
+  Serial.print("[BLE] Watch disconnected, reason=0x");
+  Serial.println(reason, HEX);
+#endif
 }
 
 // ----------------------------------------------------------------
@@ -230,6 +299,13 @@ void onPeripheralDisconnect(uint16_t /*conn_handle*/, uint8_t /*reason*/) {
 // ----------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
+
+#ifdef DEBUG
+  // Give the serial monitor time to attach
+  delay(500);
+  Serial.println("=== GarminBridge v1.1.0 ===");
+  Serial.println("[INIT] Starting...");
+#endif
 
   pinMode(LED_RED,   OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
@@ -280,18 +356,49 @@ void setup() {
   Bluefruit.Scanner.setInterval(160, 80);   // 100 ms / 50 ms
   Bluefruit.Scanner.useActiveScan(true);
   Bluefruit.Scanner.start(0);
+
+#ifdef DEBUG
+  Serial.println("[INIT] Advertising as RSC foot pod: GarminBridge");
+  Serial.println("[INIT] Scanning for FTMS treadmill...");
+#endif
 }
 
 // ----------------------------------------------------------------
 // loop()   – notify every 500 ms
 // ----------------------------------------------------------------
 void loop() {
-  static uint32_t lastSend = 0;
+  static uint32_t lastSend      = 0;
+  static uint32_t lastHeartbeat = 0;
+
+  // Speed timeout: zero out speed if no FTMS notification for >3 s
+  // (handles treadmill stopping without sending a zero-speed packet)
+  if (g_treadmill_connected && g_last_ftms_ms > 0 &&
+      (millis() - g_last_ftms_ms > 3000)) {
+    g_speed_kmh100 = 0;
+  }
 
   if (g_watch_connected && (millis() - lastSend >= 500)) {
     lastSend = millis();
     sendRSCMeasurement();
   }
+
+#ifdef DEBUG
+  // Heartbeat every 5 s
+  if (millis() - lastHeartbeat >= 5000) {
+    lastHeartbeat = millis();
+    Serial.print("[STATUS] treadmill=");
+    Serial.print(g_treadmill_connected ? "yes" : "no");
+    Serial.print(" watch=");
+    Serial.print(g_watch_connected ? "yes" : "no");
+    Serial.print(" speed=");
+    Serial.print(g_speed_kmh100 / 100.0f, 2);
+    Serial.print(" km/h dist=");
+    Serial.print(g_distance_m);
+    Serial.print(" m incl=");
+    Serial.print(g_inclination_pct10 / 10.0f, 1);
+    Serial.println(" %");
+  }
+#endif
 
   updateLED();
   delay(10);

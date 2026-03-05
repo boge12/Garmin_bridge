@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GarminBridge — Treadmill Speed on Your Garmin Watch</title>
+  <meta name="description" content="A tiny Bluetooth bridge that reads FTMS treadmill data and broadcasts it as a standard RSC foot pod to your Garmin watch. No apps, no calibration.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="site-logo">Garmin<span>Bridge</span></a>
+    <nav class="site-nav">
+      <a href="docs.html">Docs</a>
+      <a href="analyzer.html">Analyzer</a>
+      <a href="updater.html">Updater</a>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener" class="nav-icon" title="GitHub">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .3a12 12 0 0 0-3.79 23.4c.6.1.82-.26.82-.57v-2.16c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.68.82.57A12 12 0 0 0 12 .3z"/></svg>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="section" style="padding-top: 80px; padding-bottom: 64px;">
+  <div class="container text-center">
+    <div class="section__label">Open Source Hardware</div>
+    <h1 style="max-width: 680px; margin: 0 auto 20px;">Your treadmill speed.<br>On your Garmin. Accurately.</h1>
+    <p class="section__sub" style="margin: 0 auto 36px;">A tiny Bluetooth bridge that reads FTMS treadmill data and broadcasts it as a standard RSC foot pod — no apps, no calibration, no subscription.</p>
+
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:48px;">
+      <a href="#buy" class="btn btn-primary btn-lg">Buy Assembled — $59.99</a>
+      <a href="https://github.com/boge12/Garmin_bridge/releases" target="_blank" rel="noopener" class="btn btn-secondary btn-lg">DIY Kit — $25</a>
+    </div>
+
+    <!-- Bridge diagram -->
+    <div class="bridge-diagram">
+      <div class="bridge-diagram__node">
+        <div class="bridge-diagram__icon">🏃</div>
+        <div class="bridge-diagram__label">Treadmill</div>
+        <div class="bridge-diagram__proto">FTMS / BLE</div>
+      </div>
+      <div class="bridge-diagram__arrow">→</div>
+      <div class="bridge-diagram__node">
+        <div class="bridge-diagram__icon" style="border-color: var(--accent); box-shadow: 0 0 12px #00d4aa33;">🔵</div>
+        <div class="bridge-diagram__label">GarminBridge</div>
+        <div class="bridge-diagram__proto">nRF52840</div>
+      </div>
+      <div class="bridge-diagram__arrow">→</div>
+      <div class="bridge-diagram__node">
+        <div class="bridge-diagram__icon">⌚</div>
+        <div class="bridge-diagram__label">Garmin Watch</div>
+        <div class="bridge-diagram__proto">RSC Foot Pod</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HOW IT WORKS ===================== -->
+<section class="section">
+  <div class="container">
+    <div class="section__label">How It Works</div>
+    <h2 class="section__title">Three steps, no setup</h2>
+    <div class="grid-3" style="margin-top: 32px;">
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">🔌</div>
+        <h3 style="margin-bottom: 8px;">1. Plug In</h3>
+        <p class="text-muted">Power from any USB port — your treadmill's built-in USB, a wall adapter, or a power bank.</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">📡</div>
+        <h3 style="margin-bottom: 8px;">2. Auto-Connect</h3>
+        <p class="text-muted">GarminBridge scans for nearby FTMS treadmills and connects automatically. No app needed.</p>
+      </div>
+      <div class="card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 16px;">⌚</div>
+        <h3 style="margin-bottom: 8px;">3. Pair Watch</h3>
+        <p class="text-muted">Add "GarminBridge" as a foot pod sensor in your Garmin's Settings → Sensors. Done.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== LED STATES ===================== -->
+<section class="section">
+  <div class="container">
+    <div class="section__label">Status Indicator</div>
+    <h2 class="section__title">Know what's happening at a glance</h2>
+    <div class="grid-4 grid-2--keep" style="margin-top: 32px;">
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <span class="status-dot led-blue"></span>
+          <strong>Blue</strong>
+        </div>
+        <p class="text-muted" style="font-size:0.88rem;">Booting or searching for a treadmill via Bluetooth.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <span class="status-dot led-yellow"></span>
+          <strong>Yellow</strong>
+        </div>
+        <p class="text-muted" style="font-size:0.88rem;">Treadmill connected. Waiting for your Garmin watch to pair.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <span class="status-dot led-red"></span>
+          <strong>Red</strong>
+        </div>
+        <p class="text-muted" style="font-size:0.88rem;">Watch connected, but no treadmill found. Check the treadmill is on.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <span class="status-dot led-green"></span>
+          <strong>Green</strong>
+        </div>
+        <p class="text-muted" style="font-size:0.88rem;">Fully operational. Speed and distance are flowing to your watch.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== COMPATIBILITY ===================== -->
+<section class="section">
+  <div class="container">
+    <div class="section__label">Compatibility</div>
+    <h2 class="section__title">Works with most modern treadmills and watches</h2>
+    <div class="grid-2" style="margin-top: 32px;">
+      <div>
+        <h3 style="margin-bottom: 16px;">✅ Compatible Watches</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Brand</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Garmin Forerunner series</td><td>Full support (245, 255, 265, 955, 965…)</td></tr>
+              <tr><td>Garmin Fenix series</td><td>Full support (6, 7, 8…)</td></tr>
+              <tr><td>Garmin Venu / Vivoactive</td><td>Full support</td></tr>
+              <tr><td>COROS Pace / Apex / Vertix</td><td>RSC compatible, should work</td></tr>
+              <tr><td>Polar Vantage / Grit X</td><td>RSC compatible, should work</td></tr>
+              <tr><td>Suunto 9 / Race</td><td>RSC compatible, unverified</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top: 24px; margin-bottom: 16px;">✅ Compatible Treadmills</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Brand</th><th>Protocol</th></tr></thead>
+            <tbody>
+              <tr><td>NordicTrack</td><td>FTMS via iFit</td></tr>
+              <tr><td>ProForm</td><td>FTMS via iFit</td></tr>
+              <tr><td>Bowflex</td><td>FTMS</td></tr>
+              <tr><td>Sole Fitness</td><td>FTMS</td></tr>
+              <tr><td>Horizon Fitness</td><td>FTMS</td></tr>
+              <tr><td>Technogym</td><td>FTMS (select models)</td></tr>
+              <tr><td>Zwift-compatible machines</td><td>FTMS</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom: 16px;">❌ Not Compatible</h3>
+        <div class="callout callout-gray" style="margin-bottom: 16px;">
+          <strong>Apple Watch</strong>
+          Apple Watch uses a proprietary protocol and cannot use RSC foot pods.
+        </div>
+        <div class="callout callout-gray" style="margin-bottom: 16px;">
+          <strong>Peloton Tread</strong>
+          Peloton uses a closed proprietary Bluetooth stack — FTMS is not exposed.
+        </div>
+        <div class="callout callout-gray" style="margin-bottom: 16px;">
+          <strong>LifeFitness Commercial</strong>
+          Commercial gym equipment typically runs proprietary protocols.
+        </div>
+        <div class="callout callout-gray">
+          <strong>Dumb/manual treadmills</strong>
+          No Bluetooth at all — nothing to bridge.
+        </div>
+
+        <div class="callout callout-info" style="margin-top: 24px;">
+          <strong>How to check your treadmill</strong>
+          If your treadmill supports Zwift, Kinomap, or any fitness app via Bluetooth — it almost certainly uses FTMS and will work with GarminBridge.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SPECS ===================== -->
+<section class="section">
+  <div class="container">
+    <div class="section__label">Technical Specs</div>
+    <h2 class="section__title mb-32">Small, simple, open</h2>
+    <div class="table-wrap" style="max-width: 600px;">
+      <table>
+        <tbody>
+          <tr><td><strong>Bluetooth Chip</strong></td><td>Seeed XIAO nRF52840</td></tr>
+          <tr><td><strong>Treadmill Protocol</strong></td><td>FTMS (Fitness Machine Service, BLE)</td></tr>
+          <tr><td><strong>Watch Protocol</strong></td><td>RSC (Running Speed &amp; Cadence, BLE)</td></tr>
+          <tr><td><strong>Power</strong></td><td>USB-C 5V, ~20 mA</td></tr>
+          <tr><td><strong>Size (with case)</strong></td><td>~25 × 20 × 12 mm</td></tr>
+          <tr><td><strong>Cadence</strong></td><td>Always 0 — watch uses wrist-based cadence</td></tr>
+          <tr><td><strong>Firmware</strong></td><td>Open source (MIT), Arduino / Adafruit BSP</td></tr>
+          <tr><td><strong>Update Method</strong></td><td>UF2 drag-and-drop or <a href="updater.html">web updater</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="section">
+  <div class="container">
+    <div class="section__label">FAQ</div>
+    <h2 class="section__title mb-32">Common questions</h2>
+    <div style="max-width: 680px;">
+
+      <details>
+        <summary>Does it work with my NordicTrack / iFit treadmill?</summary>
+        <div class="details-body">
+          Yes — NordicTrack and ProForm treadmills broadcast FTMS via Bluetooth. However, only one device can be the FTMS central at a time. If your iFit app is already connected to the treadmill, disconnect it first, then GarminBridge will auto-connect within seconds.
+        </div>
+      </details>
+
+      <details>
+        <summary>Why does my watch show 0 cadence / steps per minute?</summary>
+        <div class="details-body">
+          This is by design. GarminBridge has no accelerometer, so it cannot count steps. Cadence is set to 0 in the RSC packet, which tells your Garmin to measure cadence itself using its built-in wrist or foot sensors. Your watch's cadence reading will be accurate from its own sensors.
+        </div>
+      </details>
+
+      <details>
+        <summary>Will two people be able to use it simultaneously?</summary>
+        <div class="details-body">
+          Not with a single unit. Each GarminBridge bridges exactly one treadmill to one watch. For two runners on separate treadmills, each would need their own unit.
+        </div>
+      </details>
+
+      <details>
+        <summary>Does it track elevation / incline?</summary>
+        <div class="details-body">
+          GarminBridge reads inclination from the treadmill (if the treadmill provides it via FTMS), but the RSC foot pod protocol has no inclination field, so it cannot forward that data to your watch. Your Garmin's built-in barometric altimeter will track elevation gain as you run. Inclination data is visible in the <a href="analyzer.html">web analyzer</a>.
+        </div>
+      </details>
+
+      <details>
+        <summary>My speed shows as about 39% of the actual speed. Why?</summary>
+        <div class="details-body">
+          This is a known bug in firmware versions before v1.1.0. The RSC speed unit is 1/256 m/s, and the old firmware used 1/100 m/s — causing a 2.56× underreading. Update your firmware via the <a href="updater.html">updater page</a> to fix this.
+        </div>
+      </details>
+
+      <details>
+        <summary>Does it need internet or an app?</summary>
+        <div class="details-body">
+          No internet connection, no app, no account. GarminBridge is a pure Bluetooth bridge. It works entirely offline and keeps no data — there is nothing to sync or subscribe to.
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BUY / DIY ===================== -->
+<section class="section" id="buy">
+  <div class="container">
+    <div class="section__label">Get One</div>
+    <h2 class="section__title mb-32">Choose your path</h2>
+    <div class="grid-2">
+
+      <div class="card" style="border-color: var(--accent);">
+        <div style="font-size: 2rem; margin-bottom: 12px;">📦</div>
+        <h3 style="margin-bottom: 4px;">Assembled Unit</h3>
+        <div style="font-size: 1.8rem; font-weight: 700; color: var(--accent); margin: 12px 0;">$59.99</div>
+        <ul style="list-style: none; margin-bottom: 24px; display: flex; flex-direction: column; gap: 8px;">
+          <li>✅ Ready to use out of the box</li>
+          <li>✅ Includes 3D-printed case</li>
+          <li>✅ Ships to USA &amp; Canada</li>
+          <li>✅ Latest firmware pre-loaded</li>
+        </ul>
+        <a href="#" class="btn btn-primary" style="width:100%; justify-content:center;">Buy on Etsy →</a>
+        <p class="text-muted mt-8" style="font-size:0.8rem; text-align:center;">Ships within 3 business days</p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 12px;">🔧</div>
+        <h3 style="margin-bottom: 4px;">DIY Kit</h3>
+        <div style="font-size: 1.8rem; font-weight: 700; margin: 12px 0;">~$10–15</div>
+        <ul style="list-style: none; margin-bottom: 24px; display: flex; flex-direction: column; gap: 8px;">
+          <li>✅ Just a Seeed XIAO nRF52840</li>
+          <li>✅ No soldering required</li>
+          <li>✅ Ships worldwide</li>
+          <li>✅ Open source, MIT license</li>
+        </ul>
+        <a href="https://github.com/boge12/Garmin_bridge/releases" target="_blank" rel="noopener" class="btn btn-secondary" style="width:100%; justify-content:center;">Download Firmware →</a>
+        <p class="text-muted mt-8" style="font-size:0.8rem; text-align:center;">See <a href="docs.html#quick-start">Quick Start</a> for flashing instructions</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="site-footer">
+  <div class="container">
+    <div>© 2024 GarminBridge · <a href="https://github.com/boge12/Garmin_bridge/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></div>
+    <div style="display:flex; gap:20px; align-items:center;">
+      <span>No data collected</span>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener">GitHub</a>
+      <a href="docs.html">Docs</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

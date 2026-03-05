@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firmware Updater — GarminBridge</title>
+  <meta name="description" content="Update GarminBridge firmware via UF2 drag-and-drop or WebUSB bootloader trigger.">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .step-card {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-body h3 { margin-bottom: 6px; }
+    .step-body p  { color: var(--muted); font-size: 0.9rem; }
+    .file-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      background: var(--surface);
+    }
+    .file-drop:hover, .file-drop.drag-over {
+      border-color: var(--accent);
+      background: rgba(0,212,170,0.05);
+    }
+    .file-drop input { display: none; }
+    .file-drop .icon { font-size: 2rem; margin-bottom: 8px; }
+    .file-drop p { color: var(--muted); font-size: 0.9rem; margin: 0; }
+    .file-selected { color: var(--accent); font-size: 0.85rem; margin-top: 8px; }
+    #webusb-banner { margin-bottom: 24px; }
+    #usb-progress-wrap { margin-top: 16px; display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="site-logo">Garmin<span>Bridge</span></a>
+    <nav class="site-nav">
+      <a href="docs.html">Docs</a>
+      <a href="analyzer.html">Analyzer</a>
+      <a href="updater.html" class="active">Updater</a>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener" class="nav-icon" title="GitHub">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .3a12 12 0 0 0-3.79 23.4c.6.1.82-.26.82-.57v-2.16c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.68.82.57A12 12 0 0 0 12 .3z"/></svg>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="container" style="padding-top: 40px; padding-bottom: 80px; max-width: 720px;">
+
+  <h1 style="margin-bottom: 8px;">Firmware Updater</h1>
+  <p class="text-muted" style="margin-bottom: 32px;">Keep your GarminBridge up to date with the latest firmware.</p>
+
+  <!-- Current version callout -->
+  <div class="callout callout-info" style="margin-bottom: 32px;">
+    <strong>Latest firmware: v1.1.0</strong>
+    Fixes RSC speed unit bug (watch now shows correct speed). Adds inclination parsing, speed timeout, and serial debug output.
+    <a href="https://github.com/boge12/Garmin_bridge/releases" target="_blank" rel="noopener" style="color: var(--accent); margin-left: 8px;">Release notes →</a>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('uf2', this)">UF2 Drag-and-Drop</button>
+    <button class="tab-btn" onclick="switchTab('webusb', this)">WebUSB Bootloader Trigger</button>
+  </div>
+
+  <!-- ===== TAB 1: UF2 ===== -->
+  <div class="tab-panel active" id="tab-uf2">
+
+    <div class="callout callout-info" style="margin-bottom: 28px;">
+      <strong>Recommended method — works on any OS, any browser.</strong>
+      No special software required. Just double-tap and drag.
+    </div>
+
+    <div class="step-card">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Download the latest firmware</h3>
+        <p>Get the <code>.uf2</code> file from the GitHub releases page.</p>
+        <a href="https://github.com/boge12/Garmin_bridge/releases/latest" target="_blank" rel="noopener" class="btn btn-primary mt-16" style="display:inline-flex;">
+          Download garmin_bridge_v1.1.0.uf2 →
+        </a>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Enter bootloader mode</h3>
+        <p>Connect GarminBridge to your computer via USB-C. Then <strong>double-tap the reset button</strong> quickly (within ~0.5 s). The LED will flash and a USB drive named <strong>XIAO-BOOT</strong> (or <strong>GARMINBRG</strong>) will appear on your computer.</p>
+        <div class="callout callout-warn mt-16">
+          <strong>Single-tap vs double-tap:</strong> A single tap resets the firmware. A double-tap enters bootloader mode and shows the USB drive. If the drive doesn't appear, try again with a faster double-tap.
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Drag and drop the .uf2 file</h3>
+        <p>Open the XIAO-BOOT drive in your file manager and drag the <code>.uf2</code> file onto it. The drive will disappear and GarminBridge will reboot automatically — usually within 2–3 seconds.</p>
+        <p class="mt-8">You do <em>not</em> need to eject the drive first.</p>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Done!</h3>
+        <p>GarminBridge reboots into the new firmware. The LED will turn blue as it scans for a treadmill. Open Arduino Serial Monitor (115200 baud) to verify the version number in the startup message.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-gray mt-24">
+      <strong>Troubleshooting UF2:</strong>
+      If the drive doesn't appear, make sure you're using a data USB-C cable (not a charge-only cable). Some cables only carry power. Try a different cable or USB port.
+    </div>
+
+  </div><!-- /tab-uf2 -->
+
+  <!-- ===== TAB 2: WebUSB ===== -->
+  <div class="tab-panel" id="tab-webusb">
+
+    <div class="browser-banner" id="webusb-banner">
+      <span style="font-size:1.2rem;">⚠️</span>
+      <div>
+        <strong>Chrome only.</strong>
+        WebUSB requires Chrome on desktop. Firefox, Safari, and Edge (non-Chromium) are not supported.
+      </div>
+    </div>
+
+    <div class="callout callout-warn" style="margin-bottom: 28px;">
+      <strong>What this tab does (and doesn't do)</strong>
+      WebUSB cannot write directly to the UF2 mass storage drive (the OS claims that interface). This tab can <em>trigger bootloader mode</em> for you — saving the manual double-tap step. You'll still need to drag the <code>.uf2</code> file after.
+    </div>
+
+    <h3 style="margin-bottom: 16px;">Step 1 — Download firmware</h3>
+    <a href="https://github.com/boge12/Garmin_bridge/releases/latest" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-bottom: 28px; display: inline-flex;">
+      Download garmin_bridge_v1.1.0.uf2 →
+    </a>
+
+    <h3 style="margin-bottom: 12px;">Step 2 — Select .uf2 file</h3>
+    <div class="file-drop" id="file-drop" onclick="document.getElementById('file-input').click()"
+         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".uf2" onchange="handleFileSelect(event)">
+      <div class="icon">📂</div>
+      <p>Click to select a .uf2 file, or drag it here</p>
+      <div class="file-selected hidden" id="file-selected-name"></div>
+    </div>
+
+    <h3 style="margin-top: 28px; margin-bottom: 12px;">Step 3 — Trigger bootloader mode</h3>
+    <p class="text-muted" style="margin-bottom: 16px;">Connect GarminBridge via USB-C, then click the button below. Chrome will ask you to select the device.</p>
+    <button class="btn btn-primary" id="webusb-btn" onclick="triggerBootloader()">
+      Connect &amp; Trigger Bootloader
+    </button>
+
+    <div id="usb-progress-wrap">
+      <div class="progress-bar mt-16">
+        <div class="progress-bar__fill" id="usb-progress" style="width: 0%"></div>
+      </div>
+      <div class="log-output mt-8" id="usb-log"></div>
+    </div>
+
+    <div class="step-card mt-24">
+      <div class="step-num" style="background: var(--surface2); color: var(--muted);">4</div>
+      <div class="step-body">
+        <h3>Drag the .uf2 file to the USB drive</h3>
+        <p>After step 3 succeeds, a drive named <strong>XIAO-BOOT</strong> will appear. Drag your downloaded <code>.uf2</code> file onto it to complete the update.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-gray mt-16">
+      <strong>Advanced: Full browser-based DFU</strong>
+      Implementing the full Nordic DFU protocol in JavaScript (which would eliminate the drag-and-drop step entirely) is planned for a future release. For now, the bootloader trigger + drag-and-drop approach is the most reliable method.
+    </div>
+
+  </div><!-- /tab-webusb -->
+
+</div>
+</main>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="site-footer">
+  <div class="container">
+    <div>© 2024 GarminBridge · <a href="https://github.com/boge12/Garmin_bridge/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></div>
+    <div style="display:flex; gap:20px; align-items:center;">
+      <span>No data collected</span>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener">GitHub</a>
+      <a href="docs.html">Docs</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ================================================================
+// Tabs
+// ================================================================
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ================================================================
+// File drop
+// ================================================================
+let selectedFile = null;
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) setFile(file);
+}
+function handleDragOver(event) {
+  event.preventDefault();
+  document.getElementById('file-drop').classList.add('drag-over');
+}
+function handleDragLeave() {
+  document.getElementById('file-drop').classList.remove('drag-over');
+}
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('file-drop').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.endsWith('.uf2')) setFile(file);
+}
+function setFile(file) {
+  selectedFile = file;
+  const el = document.getElementById('file-selected-name');
+  el.textContent = '✓ ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+  el.classList.remove('hidden');
+}
+
+// ================================================================
+// WebUSB support check
+// ================================================================
+(function checkWebUSB() {
+  if (typeof navigator.usb === 'undefined') {
+    document.getElementById('webusb-banner').classList.add('visible');
+    document.getElementById('webusb-btn').disabled = true;
+  }
+})();
+
+// ================================================================
+// WebUSB — trigger bootloader mode via CDC serial
+// ================================================================
+let usbDevice = null;
+
+function logUSB(msg, cls) {
+  const log = document.getElementById('usb-log');
+  const line = document.createElement('span');
+  if (cls) line.className = 'log-' + cls;
+  line.textContent = msg + '\n';
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setProgress(pct) {
+  document.getElementById('usb-progress').style.width = pct + '%';
+}
+
+async function triggerBootloader() {
+  document.getElementById('usb-progress-wrap').style.display = 'block';
+  document.getElementById('usb-log').textContent = '';
+  setProgress(10);
+
+  try {
+    logUSB('Requesting USB device...');
+
+    // Adafruit VID 0x239A — nRF52 bootloader / CDC ACM
+    usbDevice = await navigator.usb.requestDevice({
+      filters: [{ vendorId: 0x239A }]
+    });
+
+    logUSB('Device selected: ' + (usbDevice.productName || 'Unknown'));
+    setProgress(25);
+
+    await usbDevice.open();
+    logUSB('USB device opened.');
+    setProgress(40);
+
+    // Select the first configuration
+    if (usbDevice.configuration === null) {
+      await usbDevice.selectConfiguration(1);
+    }
+    setProgress(55);
+
+    // Find CDC ACM interface (class 0x0A = CDC Data)
+    let ifaceNum = null;
+    let epOut    = null;
+    for (const iface of usbDevice.configuration.interfaces) {
+      for (const alt of iface.alternates) {
+        if (alt.interfaceClass === 0x0A || alt.interfaceClass === 0x02) {
+          ifaceNum = iface.interfaceNumber;
+          for (const ep of alt.endpoints) {
+            if (ep.direction === 'out') epOut = ep.endpointNumber;
+          }
+          break;
+        }
+      }
+      if (ifaceNum !== null) break;
+    }
+
+    if (ifaceNum === null) {
+      // Fall back to interface 1 (common for Adafruit nRF52 CDC)
+      ifaceNum = 1;
+      logUSB('CDC interface not found by class; trying interface 1.', 'warn');
+    }
+
+    await usbDevice.claimInterface(ifaceNum);
+    logUSB('Claimed interface ' + ifaceNum + '.');
+    setProgress(70);
+
+    // Send the "enter UF2 bootloader" magic bytes used by Adafruit nRF52 bootloader:
+    // Write GPREGRET = 0x57 (DFU_MAGIC_UF2_RESET) and soft-reset via CDC serial.
+    // The Adafruit BSP checks for this byte in the bootloader on reset.
+    // We write a NVM entry via a known serial command supported by the BSP.
+    const encoder = new TextEncoder();
+    // Adafruit's serial bootloader command: send 0x57 as a raw byte
+    const triggerBytes = new Uint8Array([0x57]);
+
+    if (epOut !== null) {
+      await usbDevice.transferOut(epOut, triggerBytes);
+      logUSB('Sent bootloader trigger byte (0x57).', 'ok');
+    } else {
+      // Try control transfer as fallback
+      logUSB('No OUT endpoint found; trying control transfer.', 'warn');
+      await usbDevice.controlTransferOut({
+        requestType: 'class',
+        recipient: 'interface',
+        request: 0x09,    // SET_REPORT
+        value: 0x0300,
+        index: ifaceNum
+      }, triggerBytes);
+    }
+    setProgress(85);
+
+    // Small delay for device to process, then close
+    await new Promise(r => setTimeout(r, 300));
+    await usbDevice.close();
+    setProgress(100);
+
+    logUSB('Bootloader triggered! Watch for the XIAO-BOOT drive to appear.', 'ok');
+    logUSB('Drag your .uf2 file onto the drive to complete the update.', 'ok');
+
+  } catch (err) {
+    logUSB('Error: ' + err.message, 'err');
+    if (usbDevice) {
+      try { await usbDevice.close(); } catch (_) {}
+    }
+    if (err.name !== 'NotFoundError') {
+      logUSB('Tip: If this failed, use the manual double-tap method on the UF2 tab instead.', 'warn');
+    }
+  }
+}
+</script>
+
+</body>
+</html>

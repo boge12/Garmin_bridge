@@ -1,0 +1,29 @@
+# Arduino build artifacts
+*.elf
+*.hex
+*.bin
+*.map
+build/
+.arduino15/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*~
+
+# Node (if ever used for tooling)
+node_modules/
+npm-debug.log*
+
+# Python cache (if any scripts added)
+__pycache__/
+*.pyc
+
+# UF2 release binaries — tracked in releases, not in tree
+firmware/releases/*.uf2

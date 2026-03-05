@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analyzer — GarminBridge</title>
+  <meta name="description" content="Live BLE dashboard for GarminBridge. Connect via Web Bluetooth to see speed, distance, and cadence in real time.">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .connect-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      text-align: center;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .connect-panel h2 { margin-bottom: 8px; }
+    .connect-panel p  { color: var(--muted); margin-bottom: 24px; }
+    .device-info {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 16px;
+      text-align: left;
+    }
+    #dashboard { display: none; margin-top: 32px; }
+    #sparkline-canvas {
+      width: 100%;
+      height: 120px;
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-top: 16px;
+    }
+    .unit-toggle {
+      font-size: 0.78rem;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 2px 6px;
+      border: 1px solid var(--accent-dim);
+      border-radius: 4px;
+      background: rgba(0,212,170,0.07);
+      margin-top: 4px;
+      display: inline-block;
+    }
+    .session-timer {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .hex-row {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: #aaa;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      gap: 12px;
+    }
+    .hex-row:last-child { border-bottom: none; }
+    .hex-bytes { color: var(--accent); }
+    .hex-decoded { color: var(--muted); font-size: 0.75rem; margin-top: 3px; }
+    .sparkline-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="site-logo">Garmin<span>Bridge</span></a>
+    <nav class="site-nav">
+      <a href="docs.html">Docs</a>
+      <a href="analyzer.html" class="active">Analyzer</a>
+      <a href="updater.html">Updater</a>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener" class="nav-icon" title="GitHub">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .3a12 12 0 0 0-3.79 23.4c.6.1.82-.26.82-.57v-2.16c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.68.82.57A12 12 0 0 0 12 .3z"/></svg>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="container" style="padding-top: 40px; padding-bottom: 80px;">
+
+  <h1 style="margin-bottom: 8px;">Live BLE Analyzer</h1>
+  <p class="text-muted" style="margin-bottom: 32px;">Connect to a GarminBridge and inspect live RSC data directly in your browser.</p>
+
+  <!-- Browser support warning -->
+  <div class="browser-banner" id="browser-banner">
+    <span style="font-size:1.2rem;">⚠️</span>
+    <div>
+      <strong>Unsupported browser.</strong>
+      Web Bluetooth requires <strong>Chrome or Edge</strong> on desktop (or Chrome on Android). Firefox and Safari are not supported.
+    </div>
+  </div>
+
+  <!-- Connection panel -->
+  <div class="connect-panel" id="connect-panel">
+    <div style="font-size:2.5rem; margin-bottom:16px;">🔵</div>
+    <h2>Connect to GarminBridge</h2>
+    <p>Click the button below to open the Bluetooth device picker. Select "GarminBridge" from the list.</p>
+    <button class="btn btn-primary btn-lg" id="connect-btn" onclick="connectBLE()">Connect via Bluetooth</button>
+    <button class="btn btn-danger btn-sm hidden" id="disconnect-btn" onclick="disconnectBLE()" style="margin-top:12px;">Disconnect</button>
+    <div class="device-info hidden" id="device-info">
+      <span class="badge badge-green" style="margin-bottom:8px; display:inline-flex;" id="conn-status">● Connected</span><br>
+      Device: <strong id="device-name">—</strong>
+    </div>
+  </div>
+
+  <!-- Live dashboard (hidden until connected) -->
+  <div id="dashboard">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2>Live Data</h2>
+      <span class="session-timer" id="session-timer">Session: 00:00</span>
+    </div>
+
+    <div class="grid-2 grid-2--keep">
+      <!-- Speed tile -->
+      <div class="metric-tile">
+        <div class="metric-tile__label">Speed</div>
+        <div class="metric-tile__value" id="speed-val">0.0</div>
+        <div class="metric-tile__unit">
+          <span id="speed-unit-label">km/h</span>
+          <span class="unit-toggle" onclick="toggleSpeedUnit()" id="speed-unit-toggle">switch to mph</span>
+        </div>
+      </div>
+
+      <!-- Distance tile -->
+      <div class="metric-tile">
+        <div class="metric-tile__label">Distance</div>
+        <div class="metric-tile__value" id="dist-val">0.00</div>
+        <div class="metric-tile__unit">
+          <span id="dist-unit-label">km</span>
+          <span class="unit-toggle" onclick="toggleDistUnit()" id="dist-unit-toggle">switch to miles</span>
+        </div>
+      </div>
+
+      <!-- Cadence tile -->
+      <div class="metric-tile">
+        <div class="metric-tile__label">Cadence</div>
+        <div class="metric-tile__value" id="cadence-val">0</div>
+        <div class="metric-tile__unit">spm</div>
+        <div class="metric-tile__note">Always 0 — your watch measures cadence itself</div>
+      </div>
+
+      <!-- Inclination tile -->
+      <div class="metric-tile">
+        <div class="metric-tile__label">Inclination</div>
+        <div class="metric-tile__value" id="incl-val">—</div>
+        <div class="metric-tile__unit">% grade</div>
+        <div class="metric-tile__note">RSC has no inclination field; shown if available from FTMS</div>
+      </div>
+    </div>
+
+    <!-- Sparkline -->
+    <div class="mt-24">
+      <div class="sparkline-label">
+        <span>Speed over last 60 seconds</span>
+        <span id="sparkline-range">0 – 0 km/h</span>
+      </div>
+      <canvas id="sparkline-canvas"></canvas>
+    </div>
+
+    <!-- Raw Packet Inspector -->
+    <details class="mt-24" id="packet-inspector">
+      <summary style="padding: 14px 0;">Raw RSC Packet Inspector</summary>
+      <div class="details-body">
+        <p>Last 5 RSC Measurement notifications (0x2A53), newest first.</p>
+        <div id="packet-list" style="margin-top: 12px;"></div>
+        <p class="text-muted mt-16" style="font-size:0.8rem;">
+          Byte layout: [0] flags | [1-2] speed (1/256 m/s, LE) | [3] cadence | [4-7] distance (1/10 m, LE)
+        </p>
+      </div>
+    </details>
+
+  </div><!-- /dashboard -->
+
+</div>
+</main>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="site-footer">
+  <div class="container">
+    <div>© 2024 GarminBridge · <a href="https://github.com/boge12/Garmin_bridge/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></div>
+    <div style="display:flex; gap:20px; align-items:center;">
+      <span>No data collected</span>
+      <a href="https://github.com/boge12/Garmin_bridge" target="_blank" rel="noopener">GitHub</a>
+      <a href="docs.html">Docs</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ================================================================
+// State
+// ================================================================
+let bleDevice = null;
+let bleChar   = null;
+let sessionStartMs = null;
+let sessionTimerInterval = null;
+
+// Ring buffer: 120 samples (60 s at 2 Hz)
+const SPARKLINE_LEN = 120;
+const sparkData = new Array(SPARKLINE_LEN).fill(null);
+let sparkHead = 0;
+
+const rawPackets = [];   // last 5 raw DataView packets
+
+// Unit preferences (km/h vs mph, km vs mi)
+let speedUnitMph = localStorage.getItem('gb_speedMph') === '1';
+let distUnitMi   = localStorage.getItem('gb_distMi')  === '1';
+
+// Current values in SI units
+let currentSpeedKph = 0;
+let currentDistKm   = 0;
+
+// ================================================================
+// Browser support check
+// ================================================================
+(function checkBrowser() {
+  if (typeof navigator.bluetooth === 'undefined') {
+    document.getElementById('browser-banner').classList.add('visible');
+    document.getElementById('connect-btn').disabled = true;
+  }
+  // Apply saved unit preferences
+  updateUnitLabels();
+})();
+
+// ================================================================
+// BLE connection
+// ================================================================
+async function connectBLE() {
+  try {
+    const btn = document.getElementById('connect-btn');
+    btn.textContent = 'Connecting…';
+    btn.disabled = true;
+
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'GarminBridge' }],
+      optionalServices: ['running_speed_and_cadence']
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onBLEDisconnected);
+
+    const server  = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(0x1814);
+    bleChar        = await service.getCharacteristic(0x2A53);
+
+    bleChar.addEventListener('characteristicvaluechanged', onRSCNotification);
+    await bleChar.startNotifications();
+
+    onConnected(bleDevice.name || 'GarminBridge');
+  } catch (err) {
+    console.error('BLE connect error:', err);
+    resetConnectUI();
+    if (err.name !== 'NotFoundError' && err.name !== 'AbortError') {
+      alert('Connection failed: ' + err.message);
+    }
+  }
+}
+
+function onConnected(name) {
+  document.getElementById('connect-btn').classList.add('hidden');
+  document.getElementById('disconnect-btn').classList.remove('hidden');
+  document.getElementById('device-info').classList.remove('hidden');
+  document.getElementById('device-name').textContent = name;
+  document.getElementById('dashboard').style.display = 'block';
+  startSessionTimer();
+}
+
+async function disconnectBLE() {
+  if (bleDevice && bleDevice.gatt.connected) {
+    await bleDevice.gatt.disconnect();
+  }
+}
+
+function onBLEDisconnected() {
+  bleChar = null;
+  resetConnectUI();
+  stopSessionTimer();
+  document.getElementById('dashboard').style.display = 'none';
+}
+
+function resetConnectUI() {
+  const btn = document.getElementById('connect-btn');
+  btn.textContent = 'Connect via Bluetooth';
+  btn.disabled = (typeof navigator.bluetooth === 'undefined');
+  btn.classList.remove('hidden');
+  document.getElementById('disconnect-btn').classList.add('hidden');
+  document.getElementById('device-info').classList.add('hidden');
+}
+
+// ================================================================
+// RSC packet parser
+// ================================================================
+function onRSCNotification(event) {
+  const dv    = event.target.value;   // DataView
+  const flags = dv.getUint8(0);
+
+  // Speed: uint16, little-endian, unit = 1/256 m/s
+  const speedRaw = dv.getUint16(1, true);
+  const speedMps = speedRaw / 256;
+  currentSpeedKph = speedMps * 3.6;
+
+  // Cadence: uint8 at byte 3
+  const cadence = dv.getUint8(3);
+
+  // Optional fields
+  let offset = 4;
+  if (flags & 0x01) offset += 2;   // stride length (not used in our firmware)
+
+  // Total distance: uint32, little-endian, unit = 1/10 m
+  let distMeters = 0;
+  if ((flags & 0x02) && offset + 4 <= dv.byteLength) {
+    const distRaw = dv.getUint32(offset, true);
+    distMeters = distRaw / 10;
+  }
+  currentDistKm = distMeters / 1000;
+
+  // Start session timer on first non-zero speed
+  if (currentSpeedKph > 0 && sessionStartMs === null) {
+    sessionStartMs = Date.now();
+    startSessionTimer();
+  }
+
+  updateMetricTiles(currentSpeedKph, cadence, currentDistKm);
+  pushSparkline(currentSpeedKph);
+  addRawPacket(dv);
+  drawSparkline();
+}
+
+// ================================================================
+// UI updates
+// ================================================================
+function updateMetricTiles(speedKph, cadence, distKm) {
+  // Speed
+  let displaySpeed, dp;
+  if (speedUnitMph) {
+    displaySpeed = speedKph * 0.621371;
+    dp = 1;
+  } else {
+    displaySpeed = speedKph;
+    dp = 1;
+  }
+  document.getElementById('speed-val').textContent = displaySpeed.toFixed(dp);
+
+  // Distance
+  let displayDist;
+  if (distUnitMi) {
+    displayDist = distKm * 0.621371;
+  } else {
+    displayDist = distKm;
+  }
+  document.getElementById('dist-val').textContent = displayDist.toFixed(2);
+
+  document.getElementById('cadence-val').textContent = cadence;
+}
+
+function updateUnitLabels() {
+  document.getElementById('speed-unit-label').textContent   = speedUnitMph ? 'mph' : 'km/h';
+  document.getElementById('speed-unit-toggle').textContent  = speedUnitMph ? 'switch to km/h' : 'switch to mph';
+  document.getElementById('dist-unit-label').textContent    = distUnitMi  ? 'mi'  : 'km';
+  document.getElementById('dist-unit-toggle').textContent   = distUnitMi  ? 'switch to km'   : 'switch to miles';
+}
+
+function toggleSpeedUnit() {
+  speedUnitMph = !speedUnitMph;
+  localStorage.setItem('gb_speedMph', speedUnitMph ? '1' : '0');
+  updateUnitLabels();
+  updateMetricTiles(currentSpeedKph, 0, currentDistKm);
+  drawSparkline();
+}
+
+function toggleDistUnit() {
+  distUnitMi = !distUnitMi;
+  localStorage.setItem('gb_distMi', distUnitMi ? '1' : '0');
+  updateUnitLabels();
+  updateMetricTiles(currentSpeedKph, 0, currentDistKm);
+}
+
+// ================================================================
+// Session timer
+// ================================================================
+function startSessionTimer() {
+  if (sessionTimerInterval) return;
+  sessionTimerInterval = setInterval(updateSessionTimer, 1000);
+}
+function stopSessionTimer() {
+  clearInterval(sessionTimerInterval);
+  sessionTimerInterval = null;
+}
+function updateSessionTimer() {
+  if (sessionStartMs === null) return;
+  const s = Math.floor((Date.now() - sessionStartMs) / 1000);
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  document.getElementById('session-timer').textContent = `Session: ${mm}:${ss}`;
+}
+
+// ================================================================
+// Sparkline (ring buffer + canvas)
+// ================================================================
+function pushSparkline(speedKph) {
+  const value = speedUnitMph ? speedKph * 0.621371 : speedKph;
+  sparkData[sparkHead] = value;
+  sparkHead = (sparkHead + 1) % SPARKLINE_LEN;
+}
+
+function drawSparkline() {
+  const canvas = document.getElementById('sparkline-canvas');
+  const ctx    = canvas.getContext('2d');
+  const dpr    = window.devicePixelRatio || 1;
+  const rect   = canvas.getBoundingClientRect();
+
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const W = rect.width;
+  const H = rect.height;
+
+  // Gather data in order (oldest → newest)
+  const points = [];
+  for (let i = 0; i < SPARKLINE_LEN; i++) {
+    const idx = (sparkHead + i) % SPARKLINE_LEN;
+    if (sparkData[idx] !== null) points.push(sparkData[idx]);
+  }
+
+  if (points.length < 2) return;
+
+  const maxVal = Math.max(...points) * 1.1 || 1;
+  const minVal = 0;
+
+  // Update range label
+  const unit = speedUnitMph ? 'mph' : 'km/h';
+  document.getElementById('sparkline-range').textContent =
+    `0 – ${(Math.max(...points)).toFixed(1)} ${unit}`;
+
+  // Background
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid line at 0
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H - 1);
+  ctx.lineTo(W, H - 1);
+  ctx.stroke();
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(0,212,170,0.3)');
+  grad.addColorStop(1, 'rgba(0,212,170,0)');
+
+  const xStep = W / (points.length - 1);
+  const yFor  = v => H - ((v - minVal) / (maxVal - minVal)) * H * 0.9 - H * 0.05;
+
+  ctx.beginPath();
+  ctx.moveTo(0, yFor(points[0]));
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(i * xStep, yFor(points[i]));
+  }
+  // Close path for fill
+  const fillPath = new Path2D(ctx._currentPath);
+  ctx.lineTo((points.length - 1) * xStep, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(0, yFor(points[0]));
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(i * xStep, yFor(points[i]));
+  }
+  ctx.strokeStyle = '#00d4aa';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+// ================================================================
+// Raw packet inspector
+// ================================================================
+function addRawPacket(dv) {
+  // Store a copy (DataView is a view, not a copy)
+  const bytes = new Uint8Array(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength));
+  rawPackets.unshift(bytes);
+  if (rawPackets.length > 5) rawPackets.pop();
+  renderPacketList();
+}
+
+function renderPacketList() {
+  const list = document.getElementById('packet-list');
+  list.innerHTML = '';
+
+  rawPackets.forEach((bytes, idx) => {
+    const hexStr = Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+    // Decode
+    const flags     = bytes[0];
+    const speedRaw  = bytes[1] | (bytes[2] << 8);
+    const speedMps  = (speedRaw / 256).toFixed(3);
+    const speedKph  = (speedRaw / 256 * 3.6).toFixed(2);
+    const cadence   = bytes[3];
+    let decoded = `flags=0x${flags.toString(16).padStart(2,'0')} | speed=${speedRaw} raw → ${speedMps} m/s (${speedKph} km/h) | cad=${cadence}`;
+
+    if ((flags & 0x02) && bytes.length >= 8) {
+      const distRaw = bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24);
+      const distM   = (distRaw / 10).toFixed(1);
+      decoded += ` | dist=${distRaw} raw → ${distM} m`;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'hex-row';
+    row.innerHTML = `
+      <div class="text-muted" style="font-size:0.72rem;">pkt ${rawPackets.length - idx}</div>
+      <div>
+        <div class="hex-bytes">${hexStr}</div>
+        <div class="hex-decoded">${decoded}</div>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+</script>
+
+</body>
+</html>
