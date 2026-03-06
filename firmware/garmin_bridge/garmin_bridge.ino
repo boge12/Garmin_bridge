@@ -265,11 +265,41 @@ void onFTMSNotify(BLEClientCharacteristic* /*chr*/, uint8_t* data, uint16_t len)
 }
 
 // ----------------------------------------------------------------
+// Scanner helpers
+// ----------------------------------------------------------------
+
+// checkReportForUuid() only inspects UUID-list AD types (0x02, 0x03).
+// Some treadmills (e.g. Horizon 7.4AT) advertise UUID 0x1826 only in
+// the Service Data AD type (0x16).  This helper catches that case.
+bool checkReportForServiceData16(ble_gap_evt_adv_report_t* report, uint16_t uuid16) {
+  uint8_t* data = report->data.p_data;
+  uint8_t  len  = report->data.len;
+  uint8_t  i    = 0;
+  uint8_t  lo   = uuid16 & 0xFF;
+  uint8_t  hi   = (uuid16 >> 8) & 0xFF;
+
+  while (i + 1 < len) {
+    uint8_t field_len  = data[i];
+    if (field_len == 0 || i + field_len >= len) break;
+    uint8_t field_type = data[i + 1];
+    // AD type 0x16 = Service Data - 16-bit UUID; payload starts with UUID (LE)
+    if (field_type == 0x16 && field_len >= 3) {
+      if (data[i + 2] == lo && data[i + 3] == hi) return true;
+    }
+    i += field_len + 1;
+  }
+  return false;
+}
+
+// ----------------------------------------------------------------
 // Scanner callback
 // ----------------------------------------------------------------
 void scanCallback(ble_gap_evt_adv_report_t* report) {
-  if (Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(FTMS_SERVICE_UUID))) {
+  if (Bluefruit.Scanner.checkReportForUuid(report, BLEUuid(FTMS_SERVICE_UUID))
+      || checkReportForServiceData16(report, FTMS_SERVICE_UUID)) {
     Bluefruit.Central.connect(report);
+  } else {
+    Bluefruit.Scanner.resume();   // not a match — keep scanning
   }
 }
 
