@@ -231,6 +231,9 @@ void sendRSCMeasurement() {
 // Central callbacks
 // ----------------------------------------------------------------
 void onCentralConnect(uint16_t conn_handle) {
+  // Some treadmills (e.g. Horizon 7.4AT) need time to set up their GATT
+  // server after accepting the connection before they'll respond to ATT.
+  delay(500);
   if (!ftmsService.discover(conn_handle)) {
     Bluefruit.disconnect(conn_handle);
     return;
